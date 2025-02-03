@@ -1,17 +1,16 @@
 #include "D:/ESP/bin/Project0/components/MQTT_Fn/include/MQTT_Fn.h"
-#include <stdint.h>
+#include "driver/gpio.h"
+#include <stdlib.h>
+#include <string.h>
 
-static int msg_id; 
-char *received_data ;
 static const char *TAG = "LOG_MQTT";
+
 extern esp_mqtt_client_handle_t client ;
 
-const char* get_received_data() {
-    return received_data;
-}
+QueueHandle_t MQTT_Queue = NULL;
 
 void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data){
-
+	
 	esp_mqtt_event_handle_t event = event_data; 
 	client = event->client;
     
@@ -23,7 +22,8 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event
 		
 		case MQTT_EVENT_CONNECTED :
 		ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-        msg_id = esp_mqtt_client_subscribe(client, "sensor/status", 1);
+        esp_mqtt_client_subscribe(client, "sensor/status", 1);
+        esp_mqtt_client_subscribe(client, "sensor/control", 1);
         
 		break;
 		
@@ -41,15 +41,29 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event
 		break;
 		
 		case MQTT_EVENT_PUBLISHED:
-		ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
+		ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);		
+		
 		break;
 		
 		case MQTT_EVENT_DATA :
-		
+		// Displaying data and status
 		ESP_LOGI(TAG, "MQTT_EVENT_DATA");
         printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
-        received_data = event->data;
         printf("DATA=%.*s\r\n", event->data_len, event->data);
+        
+        // Create buffer to store received data
+        char *receivedMessage = malloc(event->data_len + 1);
+        strncpy(receivedMessage, event->data, event->data_len);
+        receivedMessage[event->data_len] = '\0';  // Null-terminate the string
+		
+		// Send data to queue
+        if (xQueueSend(MQTT_Queue,
+         	&receivedMessage,
+          	pdMS_TO_TICKS(100)) != pdPASS) {
+        	
+        	ESP_LOGE("MQTT", "Failed to send data to queue!");
+        	free(receivedMessage);  // Free memory if queue is full
+        }		
 		
 		break;
 		
@@ -84,6 +98,7 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event
 void MQTT_CLIENT_INIT(){
 	
 	ESP_LOGI(TAG,"Initialization of Client...");
+	MQTT_Queue_init();
 	esp_mqtt_client_config_t client_config = {
 		.broker = {
 			.address.hostname = "test.mosquitto.org",
@@ -111,3 +126,144 @@ void MQTT_CLIENT_INIT(){
 	
 	
 } 
+
+
+void MQTT_Queue_init(){
+	
+	MQTT_Queue = xQueueCreate(MQTT_QUEUE_LENGTH, sizeof(char *));
+	//Error Handling
+	if(MQTT_Queue == NULL){
+		ESP_LOGE(TAG,"Queue was not created");	 
+		vQueueDelete( MQTT_Queue );
+	}
+	
+	gpio_set_direction(ALARM_GPIO_PIN,GPIO_MODE_OUTPUT);
+}
+
+CommandType get_command_type(const char *cmd) {
+    if (strcmp(cmd, "DECREASE_TEMPERATURE") == 0) 	return CMD_DECREASE_TEMPERATURE;
+    if (strcmp(cmd, "INCREASE_TEMPERATURE") == 0) 	return CMD_INCREASE_TEMPERATURE;
+    if (strcmp(cmd, "DECREASE_HUMIDITY") == 0) 		return CMD_DECREASE_HUMIDITY;
+    if (strcmp(cmd, "INCREASE_HUMIDITY") == 0) 		return CMD_INCREASE_HUMIDITY;
+    if (strcmp(cmd, "FAN_SPEED_LOW") == 0) 			return CMD_FAN_SPEED_LOW;
+    if (strcmp(cmd, "FAN_SPEED_HIGH") == 0) 		return CMD_FAN_SPEED_HIGH;
+    if (strcmp(cmd, "START_IRRIGATION") == 0) 		return CMD_START_IRRIGATION;
+    if (strcmp(cmd, "STOP_IRRIGATION") == 0) 		return CMD_STOP_IRRIGATION;
+    if (strcmp(cmd, "LIGHT_ON") == 0) 				return CMD_LIGHT_ON;
+    if (strcmp(cmd, "LIGHT_OFF") == 0) 				return CMD_LIGHT_OFF;
+    if (strcmp(cmd, "START_FERTILIZING") == 0) 		return CMD_START_FERTILIZING;
+    if (strcmp(cmd, "STOP_FERTILIZING") == 0) 		return CMD_STOP_FERTILIZING;
+    if (strcmp(cmd, "AUTOMODE_ON") == 0) 			return CMD_AUTOMODE_ON;
+    if (strcmp(cmd, "AUTOMODE_OFF") == 0) 			return CMD_AUTOMODE_OFF;
+    if (strcmp(cmd, "PESTCONTROL_ON") == 0) 		return CMD_PESTCONTROL_ON;
+    if (strcmp(cmd, "PESTCONTROL_OFF") == 0) 		return CMD_PESTCONTROL_OFF;
+    if (strcmp(cmd, "ALARM_ON") == 0) 				return CMD_ALARM_ON;
+    if (strcmp(cmd, "ALARM_OFF") == 0) 				return CMD_ALARM_OFF;
+    
+    
+    return CMD_UNKNOWN;  // If command is not recognized
+}
+
+void vMQTT_QUEUE_PROCESSING_TASK(void *pvParameters){
+	char *receivedMessage;
+	
+	while(1){
+			
+		// Wait for a message in the queue
+        if (xQueueReceive(MQTT_Queue,
+         	&receivedMessage,
+         	portMAX_DELAY) == pdTRUE){
+				
+				ESP_LOGI("MQTT_PROCESS", "Processing message: %s", receivedMessage);
+				
+				// Get the command type as an enum
+            	CommandType command = get_command_type(receivedMessage);
+            	
+            switch (command) {
+               case CMD_DECREASE_TEMPERATURE:
+                    ESP_LOGI("ACTION", "Decreasing Temperature");
+                    // decrease_temperature();
+                    break;
+               case CMD_INCREASE_TEMPERATURE:
+                    ESP_LOGI("ACTION", "Increasing Temperature");
+                    // increase_temperature();
+                    break;
+                    
+               case CMD_DECREASE_HUMIDITY:
+                    ESP_LOGI("ACTION", "Decreasing Humidity");                    
+                    break;                
+               case CMD_INCREASE_HUMIDITY:
+                    ESP_LOGI("ACTION", "Increasing Humidity");                    
+                    break;
+                    
+               case CMD_FAN_SPEED_LOW:
+                    ESP_LOGI("ACTION", "Setting Fan Speed to LOW");
+                    // fan_speed_low();
+                    break;
+               case CMD_FAN_SPEED_HIGH:
+                    ESP_LOGI("ACTION", "Setting Fan Speed to HIGH");
+                    // fan_speed_high();
+                    break;
+                    
+               case CMD_LIGHT_ON:
+                    ESP_LOGI("ACTION", "Turning Light ON");
+                    // light_on();
+                    break;
+               case CMD_LIGHT_OFF:
+                    ESP_LOGI("ACTION", "Turning Light OFF");
+                    // light_off();
+                    break;
+               case CMD_START_IRRIGATION:
+                    ESP_LOGI("ACTION", "Starting Irrigation");
+                    // start_irrigation();
+                    break;
+               case CMD_STOP_IRRIGATION:
+                    ESP_LOGI("ACTION", "Stopping Irrigation");
+                    // stop_irrigation();
+                    break;
+                    
+               case CMD_START_FERTILIZING:
+                    ESP_LOGI("ACTION", "START FERTILIZING");                    
+                    break;
+               case CMD_STOP_FERTILIZING:
+                    ESP_LOGI("ACTION", "STOP FERTILIZING");                    
+                    break;
+                
+               case CMD_AUTOMODE_ON:
+                    ESP_LOGI("ACTION", "AUTOMODE ON");                    
+                    break;
+               case CMD_AUTOMODE_OFF:
+                    ESP_LOGI("ACTION", "AUTOMODE OFF");                    
+                    break;
+               
+               case CMD_PESTCONTROL_ON:
+                    ESP_LOGI("ACTION", "PESTCONTROL ON");                    
+                    break;
+               case CMD_PESTCONTROL_OFF:
+                    ESP_LOGI("ACTION", "PESTCONTROL OFF");                    
+                    break;
+                    
+               case CMD_ALARM_ON:
+                    ESP_LOGI("ACTION", "ALARM ON");
+                    gpio_set_level(ALARM_GPIO_PIN, 1);                    
+                    break;
+               case CMD_ALARM_OFF:
+                    ESP_LOGI("ACTION", "ALARM OFF");                    
+                    gpio_set_level(ALARM_GPIO_PIN, 0);
+                    break;
+                default:
+                    ESP_LOGW("MQTT_PROCESS", "Unknown command: %s", receivedMessage);
+                    break;
+            }
+
+            	free(receivedMessage);  // Free dynamically allocated memory 
+			 }
+         	
+	}
+}
+
+void GPIO_INIT(){
+	
+	gpio_reset_pin(ALARM_GPIO_PIN); 
+    gpio_set_direction(ALARM_GPIO_PIN, GPIO_MODE_OUTPUT);
+}
