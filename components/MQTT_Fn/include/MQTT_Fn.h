@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #include "esp_system.h"
 #include "esp_event.h"
@@ -15,6 +16,11 @@
 #include "driver/gpio.h"
 
 #include "mqtt_client.h"
+
+#include "hal/adc_types.h"
+
+#include "D:/ESP/bin/Project0/components/cJSON/include/cJSON.h"
+#include "D:/ESP/bin/Project0/components/oneShotADC_Fn/include/oneShotADC_Fn.h"
 
 #define MQTT_QUEUE_LENGTH 5
 #define ALARM_GPIO_PIN GPIO_NUM_2
@@ -46,4 +52,5 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event
 void MQTT_CLIENT_INIT();
 void MQTT_Queue_init();
 void vMQTT_QUEUE_PROCESSING_TASK(void *pvParameters);
+void vMQTT_DATA_PUBLISHING(void *pvParameters);
 CommandType get_command_type(const char *cmd);

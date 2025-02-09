@@ -13,7 +13,7 @@
 #include "esp_log.h"
 
 // Defines
-#define WIFI_SSID "Ahmed Banna"
+#define WIFI_SSID "Ahmed Banna_2.4G"
 #define WIFI_PASS "Shary@1281987"
 #define MAX_RETRY 5
 #define WIFI_SUCCESS 1 << 0

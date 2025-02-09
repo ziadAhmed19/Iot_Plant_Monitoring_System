@@ -1,7 +1,5 @@
 #include "D:/ESP/bin/Project0/components/MQTT_Fn/include/MQTT_Fn.h"
-#include "driver/gpio.h"
-#include <stdlib.h>
-#include <string.h>
+
 
 static const char *TAG = "LOG_MQTT";
 
@@ -166,8 +164,7 @@ CommandType get_command_type(const char *cmd) {
 
 void vMQTT_QUEUE_PROCESSING_TASK(void *pvParameters){
 	char *receivedMessage;
-	
-	while(1){
+		while(1){
 			
 		// Wait for a message in the queue
         if (xQueueReceive(MQTT_Queue,
@@ -254,11 +251,10 @@ void vMQTT_QUEUE_PROCESSING_TASK(void *pvParameters){
                 default:
                     ESP_LOGW("MQTT_PROCESS", "Unknown command: %s", receivedMessage);
                     break;
-            }
+            		}
 
             	free(receivedMessage);  // Free dynamically allocated memory 
-			 }
-         	
+		}
 	}
 }
 
@@ -266,4 +262,44 @@ void GPIO_INIT(){
 	
 	gpio_reset_pin(ALARM_GPIO_PIN); 
     gpio_set_direction(ALARM_GPIO_PIN, GPIO_MODE_OUTPUT);
+}
+
+
+void vMQTT_DATA_PUBLISHING(void *pvParameters){
+	
+	static int msg_id;
+	cJSON *msg  = cJSON_CreateObject();
+	if (msg == NULL) {
+        ESP_LOGE(TAG, "Failed to create JSON object");
+        cJSON_Delete(msg) ;
+        return;
+    }
+	
+	//JSON OBJ Initialization
+    cJSON_AddNumberToObject(msg, "Temperature", 0);
+	cJSON_AddNumberToObject(msg, "Humidity", 0);
+	cJSON_AddNumberToObject(msg, "Battery_Health", 0);
+	cJSON_AddNumberToObject(msg, "Signal_Strength", 0);
+	cJSON_AddNumberToObject(msg, "lightLevel", 0);
+	cJSON_AddNumberToObject(msg, "soilMoisture", 0);
+	cJSON_AddNumberToObject(msg, "soilNutrients", 0);
+	
+	while(1){
+		
+		cJSON_ReplaceItemInObject(msg, "Temperature", cJSON_CreateNumber(adc_oneshot_read_value(ADC_CHANNEL_0)%100));
+    	cJSON_ReplaceItemInObject(msg, "Humidity", cJSON_CreateNumber(adc_oneshot_read_value(ADC_CHANNEL_3)%100));
+		cJSON_ReplaceItemInObject(msg, "Battery_Health", cJSON_CreateNumber(adc_oneshot_read_value(ADC_CHANNEL_0) % 100));
+    	cJSON_ReplaceItemInObject(msg, "Signal_Strength", cJSON_CreateNumber(adc_oneshot_read_value(ADC_CHANNEL_3) % 100));
+    	cJSON_ReplaceItemInObject(msg, "lightLevel", cJSON_CreateNumber((adc_oneshot_read_value(ADC_CHANNEL_3) - 7) % 50));
+    	cJSON_ReplaceItemInObject(msg, "soilMoisture", cJSON_CreateNumber(adc_oneshot_read_value(ADC_CHANNEL_0) % 30));
+    	cJSON_ReplaceItemInObject(msg, "soilNutrients", cJSON_CreateNumber(adc_oneshot_read_value(ADC_CHANNEL_3) % 70));
+    	
+    	
+		// Convert JSON object to string
+    	char *json_string = cJSON_PrintUnformatted(msg); 
+		// Publish a message 
+   		msg_id = esp_mqtt_client_publish(client, "sensor/status", json_string , 0, 1, 0);
+   		ESP_LOGI(TAG, "Message published with msg_id=%d", msg_id);
+   		vTaskDelay(500);	
+   		}
 }

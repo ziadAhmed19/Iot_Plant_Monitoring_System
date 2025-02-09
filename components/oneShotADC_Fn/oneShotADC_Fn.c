@@ -1,8 +1,4 @@
-#include <stdint.h>
-#include <stdio.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "hal/adc_types.h"
+
 #include "esp_adc/adc_oneshot.h"
 #include "../oneShotADC_Fn/include/oneShotADC_Fn.h"
 
