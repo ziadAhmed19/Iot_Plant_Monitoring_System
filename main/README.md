@@ -169,7 +169,7 @@ esp_log_level_set("outbox", ESP_LOG_VERBOSE);
 	
 # Data Publishing
 
-	The main loop continuously performs the following tasks:
+	The vMQTT_DATA_PUBLISHING(void *pvParameters) Task continuously performs the following tasks:
 
     Reads data from ADC channels using:
 		adc_oneshot_read_value(ADC_CHANNEL_X);
@@ -184,7 +184,16 @@ esp_log_level_set("outbox", ESP_LOG_VERBOSE);
 		esp_mqtt_client_publish(client, "sensor/status", json_string, 0, 1, 0);
 	
 	Logs the success or failure of the publish operation.
-	
+
+# Receiving and Processing MQTT Commands
+1. Command Parsing (get_command_type)
+
+The get_command_type function is responsible for parsing incoming MQTT messages and mapping them to specific actions. It compares the received command string with predefined command strings and returns an enumerated type (CommandType) representing the action to be taken.
+
+# Queue Processing Task (vMQTT_QUEUE_PROCESSING_TASK)
+
+The vMQTT_QUEUE_PROCESSING_TASK function is a FreeRTOS task that waits for incoming MQTT messages in a queue, processes them, and takes appropriate actions based on the command type.
+
 # Project Features
 
 1-  Real-Time Data Collection:
